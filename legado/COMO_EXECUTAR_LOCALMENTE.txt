@@ -1,0 +1,116 @@
+================================================================================
+SISTEMA DE GESTÃO DE CAMPANHAS E SORTEIOS — COMPLEXO COMERCIAL DE BARCARENA/PA
+GUIA RÁPIDO DE EXECUÇÃO LOCAL (SEM INSTALAÇÃO GLOBAL OU ROOT)
+================================================================================
+
+Sim, qualquer pessoa conseguirá testar este projeto localmente no Windows, Linux
+ou macOS, inclusive sem precisar instalar bibliotecas ou configurar bancos externos.
+
+Existem 3 formas de testar:
+
+--------------------------------------------------------------------------------
+FORMA 1 — TESTE VISUAL COMPLETO NO NAVEGADOR (SEM NENHUMA DEPENDÊNCIA)
+--------------------------------------------------------------------------------
+Esta é a forma mais rápida e recomendada para validação funcional imediata.
+
+Opção A (Dois cliques):
+1. Descompacte o arquivo ZIP.
+2. Dê dois cliques diretamente no arquivo "index.html" para abrir no seu
+   navegador favorito (Chrome, Firefox, Edge, Safari, Brave).
+
+Opção B (Via servidor HTTP embutido do Python):
+1. Abra o terminal na pasta descompactada e execute:
+   python3 -m http.server 8000
+   (No Windows: python -m http.server 8000)
+2. Acesse no navegador:
+   http://localhost:8000
+
+O QUE TESTAR NA INTERFACE:
+• Modo de Simulação (topo direito): alterne instantaneamente entre:
+  - "Administrador (SEMAGRI)"
+  - "Atendente de Balcão"
+  - "Permissionário (Box 260)"
+• Aba "⚡ Balcão de Atendimento":
+  - O código "NATAL-00001" já vem pré-distribuído para o Box 260.
+  - Clique em "⚡ Validar e Emitir Número da Sorte". O sistema gera o Número 00001
+    vinculado ao CPF e marca o comprovante como UTILIZADO.
+  - Tente clicar novamente ou validar o mesmo código "NATAL-00001": o sistema
+    bloqueia na hora e exibe o alerta vermelho de RECUSA POR DUPLICIDADE.
+• Aba "🏢 Boxes & Planilha Staging":
+  - Contém as 292 linhas da planilha oficial com as anomalias do diagnóstico:
+    * Box 257 repetido (Jean Lima de Andrade);
+    * 13 boxes marcados "vago" e 13 boxes com nome em branco;
+    * Alerta de divergência em relação à capacidade física de 368 boxes do mapa.
+  - Clique em "Revisar" em qualquer linha para homologar a decisão com justificativa.
+• Aba "🎯 Campanhas & Jurídico":
+  - Veja a trava jurídica dos 6 itens obrigatórios do regulamento (promotor legal,
+    regularidade dos boxes, premiação financiada, regulamento aprovado, LGPD e
+    calendário eleitoral) impedindo a ativação antes da homologação formal.
+• Aba "🎟️ Talões & Comprovantes":
+  - Gere novos blocos com validação contra sobreposição de faixas numéricas.
+  - Consulte qualquer cupom no campo de busca para ver toda a cadeia de custódia.
+• Aba "🏪 Portal do Permissionário":
+  - Simula o Box 260 (Sulamita Ferreira - Salão e Barbearia) emitindo comprovantes
+    com valor de venda e Token QR digital, além de comunicação de avarias/extravios.
+• Aba "🏆 Apuração Loteria Federal":
+  - Insira os 5 prêmios oficiais da CEF (já vem preenchido com exemplo oficial).
+  - Clique em "Realizar Apuração": o sistema calcula o número contemplado pela
+    unidade simples dos 5 prêmios e congela a base gerando o hash SHA-256 auditável.
+• Aba "🧪 Testes Locais":
+  - Clique no botão "▶️ Executar Todos os Testes no Navegador" para rodar a suíte
+    de testes automatizados na memória e ver os 8 testes passarem com assertivas verdes.
+• Botão "🔄 Restaurar Padrão" (cabeçalho):
+  - Limpa o banco mockado no navegador e retorna ao estado inicial limpo a qualquer momento.
+
+--------------------------------------------------------------------------------
+FORMA 2 — TESTES AUTOMATIZADOS NO TERMINAL (PYTHON STANDARD LIBRARY PURA)
+--------------------------------------------------------------------------------
+Não requer pip, não requer venv, não requer permissão de root ou pacotes externos.
+Utiliza apenas a biblioteca padrão do Python 3 (unittest + sqlite3 em memória):
+
+Comando:
+python3 test_local.py
+(No Windows: python test_local.py)
+
+Resultado esperado:
+----------------------------------------------------------------------
+Ran 8 tests in 0.006s
+
+OK
+
+Os 8 testes cobrem todas as fases do Prompt:
+1. Autenticação e RBAC (ADMIN, ATENDENTE, PERMISSIONARIO)
+2. Extração da planilha oficial e detecção das anomalias reais
+3. Máquina de estados da campanha e trava jurídica dos 6 itens
+4. Geração de talões e detecção de sobreposição de intervalos
+5. Validação de balcão 1:1 e bloqueio atômico de cupom duplicado
+6. Isolamento estrito do Portal do Permissionário (proteção contra IDOR)
+7. Cálculo de KPIs do Dashboard e auditoria
+8. Apuração determinística da Loteria Federal e congelamento com hash SHA-256
+
+--------------------------------------------------------------------------------
+FORMA 3 — BACKEND COMPLETO REST API (FASTAPI + SQLITE) [OPCIONAL]
+--------------------------------------------------------------------------------
+Caso seus colegas queiram testar a API REST com documentação interativa Swagger:
+
+1. Criar ambiente virtual local (somente dentro da pasta do projeto):
+   python3 -m venv .venv
+
+2. Ativar o ambiente virtual:
+   Linux/macOS: source .venv/bin/activate
+   Windows (PowerShell): .venv\Scripts\Activate.ps1
+   Windows (CMD): .venv\Scripts\activate.bat
+
+3. Instalar as dependências no venv:
+   pip install -r requirements.txt
+
+4. Rodar a API:
+   uvicorn app.main:app --port 8000
+
+5. Acessar no navegador:
+   • Documentação Swagger OpenAPI: http://localhost:8000/docs
+   • Interface Web Integrada: http://localhost:8000/
+
+Para rodar os testes pytest da API:
+   pytest -v
+================================================================================

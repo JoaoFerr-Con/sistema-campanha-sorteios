@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Gestão de Campanhas e Sorteios — Barcarena/PA (MVP)</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-branding">
+      <div class="logo-badge">🏛️ SEMAGRI / SEICOMTEC</div>
+      <div>
+        <h1>Complexo Comercial de Barcarena</h1>
+        <p class="subtitle">Sistema de Gestão de Campanhas e Sorteios — MVP Operacional</p>
+      </div>
+    </div>
+    <div class="header-user-controls">
+      <div class="role-selector-pill">
+        <label for="activeRoleSelect">Modo de Simulação:</label>
+        <select id="activeRoleSelect" onchange="switchRole(this.value)">
+          <option value="admin">Administrador (SEMAGRI)</option>
+          <option value="atendente" selected>Atendente de Balcão</option>
+          <option value="permissionario">Permissionário (Box 260)</option>
+        </select>
+      </div>
+      <div class="user-status-badge">
+        <span class="status-dot"></span>
+        <span id="currentUserName">Atendente de Balcão</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="resetDbToDefault()" title="Reinicia o banco mock para o estado padrão">🔄 Restaurar Padrão</button>
+    </div>
+  </header>
+
+  <nav class="main-nav">
+    <button class="nav-tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Painel Geral</button>
+    <button class="nav-tab" data-tab="balcao" onclick="switchTab('balcao')">⚡ Balcão de Atendimento</button>
+    <button class="nav-tab" data-tab="boxes" onclick="switchTab('boxes')">🏢 Boxes & Planilha Staging</button>
+    <button class="nav-tab" data-tab="campanhas" onclick="switchTab('campanhas')">🎯 Campanhas & Jurídico</button>
+    <button class="nav-tab" data-tab="taloes" onclick="switchTab('taloes')">🎟️ Talões & Comprovantes</button>
+    <button class="nav-tab" data-tab="portal" onclick="switchTab('portal')">🏪 Portal do Permissionário</button>
+    <button class="nav-tab" data-tab="apuracao" onclick="switchTab('apuracao')">🏆 Apuração Loteria Federal</button>
+    <button class="nav-tab" data-tab="auditoria" onclick="switchTab('auditoria')">📜 Auditoria & Exportação</button>
+    <button class="nav-tab" data-tab="testes" onclick="switchTab('testes')" style="background-color: #f0fdf4; color: #166534;">🧪 Testes Locais</button>
+  </nav>
+
+  <main class="main-content">
+    <!-- TAB 1: DASHBOARD -->
+    <section id="tab-dashboard" class="tab-panel active">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Boxes Confirmados</div>
+          <div class="kpi-value" id="kpiBoxesConfirmed">1</div>
+          <div class="kpi-sub">Capacidade Mapa: <strong>368</strong> boxes</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Permissionários Ativos</div>
+          <div class="kpi-value" id="kpiPermsActive">1</div>
+          <div class="kpi-sub">Cadastros regularizados</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Comprovantes Emitidos</div>
+          <div class="kpi-value" id="kpiVouchersIssued">0</div>
+          <div class="kpi-sub" id="kpiVouchersTotal">Total em talões: 50</div>
+        </div>
+        <div class="kpi-card highlight">
+          <div class="kpi-title">Participações Validadas</div>
+          <div class="kpi-value" id="kpiParticipations">0</div>
+          <div class="kpi-sub" id="kpiConsumers">Consumidores únicos: 0</div>
+        </div>
+      </div>
+
+      <div class="content-row">
+        <div class="content-card flex-2">
+          <h3>Participações por Atividade Comercial</h3>
+          <div id="activityBreakdownList" class="data-list">
+            <p class="empty-state">Nenhuma participação validada ainda. Valide cupons na aba Balcão.</p>
+          </div>
+        </div>
+        <div class="content-card flex-1">
+          <h3>Motivos de Recusa no Balcão</h3>
+          <div id="rejectionsBreakdownList" class="data-list">
+            <p class="empty-state">Nenhuma recusa registrada até o momento.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: BALCÃO DE ATENDIMENTO -->
+    <section id="tab-balcao" class="tab-panel">
+      <div class="balcao-layout">
+        <div class="content-card balcao-form-card">
+          <div class="card-header-with-badge">
+            <h2>Validação Rápida no Balcão</h2>
+            <span class="badge badge-success">Regra: 1 Comprovante = 1 Número da Sorte</span>
+          </div>
+          <p class="card-instruction">O comprovante físico é consultado instantaneamente e vinculado de forma atômica ao consumidor.</p>
+
+          <form id="attendanceForm" onsubmit="handleAttendanceSubmit(event)">
+            <div class="form-group">
+              <label for="attCampaignSelect">Campanha Ativa *</label>
+              <select id="attCampaignSelect" required>
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+
+            <div class="form-group highlighted-input">
+              <label for="attVoucherCode">Código do Comprovante / Cupom *</label>
+              <div class="input-with-button">
+                <input type="text" id="attVoucherCode" placeholder="Ex: NATAL-00001" required autocomplete="off" oninput="handleVoucherLookup()">
+                <button type="button" class="btn btn-secondary" onclick="handleVoucherLookup()">🔍 Consultar</button>
+              </div>
+              <small id="voucherLookupFeedback" class="input-hint">Digite o código impresso no talão (ex: NATAL-00001 a NATAL-00050).</small>
+            </div>
+
+            <div class="grid-2col">
+              <div class="form-group">
+                <label for="attParticipantCpf">CPF do Consumidor *</label>
+                <input type="text" id="attParticipantCpf" placeholder="000.000.000-00" required maxlength="14" value="123.456.789-00">
+              </div>
+              <div class="form-group">
+                <label for="attParticipantName">Nome Completo *</label>
+                <input type="text" id="attParticipantName" placeholder="Nome do participante" required value="Rafael Santos">
+              </div>
+            </div>
+
+            <div class="grid-2col">
+              <div class="form-group">
+                <label for="attParticipantPhone">Telefone / WhatsApp *</label>
+                <input type="text" id="attParticipantPhone" placeholder="(91) 98000-0000" required value="(91) 98111-2222">
+              </div>
+              <div class="form-group">
+                <label for="attParticipantNeighborhood">Bairro em Barcarena</label>
+                <input type="text" id="attParticipantNeighborhood" placeholder="Ex: Centro, Vila dos Cabanos..." value="Centro">
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-lg" id="btnValidateAttendance">
+                ⚡ Validar e Emitir Número da Sorte
+              </button>
+            </div>
+          </form>
+
+          <div id="attendanceSuccessAlert" class="alert alert-success" style="display: none;">
+            <div class="alert-icon">🎉</div>
+            <div class="alert-body">
+              <h4 id="resLuckyNumberTitle">NÚMERO DA SORTE: 00001</h4>
+              <p id="resParticipantInfo"></p>
+              <p id="resOriginInfo"></p>
+            </div>
+          </div>
+
+          <div id="attendanceErrorAlert" class="alert alert-danger" style="display: none;">
+            <div class="alert-icon">⚠️</div>
+            <div class="alert-body">
+              <h4 id="errTitle">Recusa de Validação</h4>
+              <p id="errDesc"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-card balcao-history-card">
+          <h3>Tentativas Recentes no Balcão</h3>
+          <div class="table-responsive">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>CPF</th>
+                  <th>Resultado</th>
+                  <th>Motivo / Horário</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceHistoryTableBody">
+                <tr><td colspan="4" class="text-center">Nenhum registro no balcão ainda.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: BOXES E PLANILHA STAGING -->
+    <section id="tab-boxes" class="tab-panel">
+      <div class="section-toolbar">
+        <div class="toolbar-info">
+          <h2>Gestão de Boxes e Permissionários (Dados Reais)</h2>
+          <p>Base oficial carregada com <strong>292 registros de dados</strong> e identificação automática de inconsistências.</p>
+        </div>
+      </div>
+
+      <div class="discrepancy-banner">
+        <div class="banner-title">⚠️ Resumo de Inconsistências Identificadas nos Documentos Oficiais:</div>
+        <ul>
+          <li><strong>Capacidade Física vs. Planilha:</strong> Mapa possui 368 espaços; Planilha possui 292 linhas e omite 77 boxes (como a área de Agricultura Familiar 96..156).</li>
+          <li><strong>Duplicidade na Planilha:</strong> Box <strong>257</strong> aparece repetido duas vezes com "Jean Lima de Andrade".</li>
+          <li><strong>Ocupação Não Identificada:</strong> 13 boxes marcados como "vago" e 13 boxes com nome em branco aguardando homologação da SEMAGRI.</li>
+        </ul>
+      </div>
+
+      <div class="content-card">
+        <div class="card-header-with-badge">
+          <h3>Fila de Revisão Cadastral (Planilha Real Importada)</h3>
+          <span class="badge badge-info" id="stagingPendingCount">292 linhas</span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Linha</th>
+                <th>Box Planilha</th>
+                <th>Nome Original</th>
+                <th>Atividade Original</th>
+                <th>Anomalias Detectadas</th>
+                <th>Situação</th>
+                <th>Ações de Revisão</th>
+              </tr>
+            </thead>
+            <tbody id="stagingTableBody">
+              <tr><td colspan="7" class="text-center">Carregando dados...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="content-card" style="margin-top: 1.5rem;">
+        <h3>Boxes Oficiais Confirmados no Sistema</h3>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Número do Box</th>
+                <th>Permissionário Titular</th>
+                <th>Atividade</th>
+                <th>Situação Cadastral</th>
+              </tr>
+            </thead>
+            <tbody id="officialBoxesTableBody">
+              <tr><td colspan="4" class="text-center">Carregando boxes...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: CAMPANHAS & JURÍDICO -->
+    <section id="tab-campanhas" class="tab-panel">
+      <div class="section-toolbar">
+        <div>
+          <h2>Campanhas Promocionais</h2>
+          <p>Ciclo de vida auditável com <strong>trava jurídica obrigatória dos 6 itens</strong> antes da ativação.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openNewCampaignModal()">➕ Nova Campanha</button>
+      </div>
+
+      <div class="content-card">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nome da Campanha</th>
+                <th>Período Compras</th>
+                <th>Valor Mínimo</th>
+                <th>Situação</th>
+                <th>Promotor Legal</th>
+                <th>Aprovações Obrigatórias</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="campaignsTableBody">
+              <tr><td colspan="8" class="text-center">Carregando campanhas...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: TALÕES & COMPROVANTES -->
+    <section id="tab-taloes" class="tab-panel">
+      <div class="grid-2col">
+        <div class="content-card">
+          <h2>Distribuição de Lote / Talão</h2>
+          <p class="card-instruction">Faixas numéricas exclusivas atribuídas a um Box confirmado e Permissionário ativo.</p>
+
+          <form id="createBatchForm" onsubmit="handleCreateBatchSubmit(event)">
+            <div class="form-group">
+              <label for="batchCampaignSelect">Campanha *</label>
+              <select id="batchCampaignSelect" required></select>
+            </div>
+
+            <div class="form-group">
+              <label for="batchBoxSelect">Box Confirmado *</label>
+              <select id="batchBoxSelect" required onchange="handleBatchBoxChange(this.value)"></select>
+            </div>
+
+            <div class="form-group">
+              <label for="batchPermissionarioInput">Permissionário Responsável</label>
+              <input type="text" id="batchPermissionarioInput" readonly class="input-readonly">
+            </div>
+
+            <div class="grid-3col">
+              <div class="form-group">
+                <label for="batchPrefix">Prefixo do Código *</label>
+                <input type="text" id="batchPrefix" placeholder="Ex: NATAL" required maxlength="10" value="NATAL">
+              </div>
+              <div class="form-group">
+                <label for="batchStart">Nº Inicial *</label>
+                <input type="number" id="batchStart" placeholder="51" required min="1" value="51">
+              </div>
+              <div class="form-group">
+                <label for="batchEnd">Nº Final *</label>
+                <input type="number" id="batchEnd" placeholder="100" required min="1" value="100">
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">📦 Gerar e Distribuir Talão</button>
+          </form>
+        </div>
+
+        <div class="content-card">
+          <h2>Consulta de Comprovante</h2>
+          <p class="card-instruction">Verifique a cadeia completa de custódia de qualquer comprovante.</p>
+
+          <div class="form-group">
+            <label for="lookupVoucherInput">Código do Comprovante</label>
+            <div class="input-with-button">
+              <input type="text" id="lookupVoucherInput" placeholder="Ex: NATAL-00001" value="NATAL-00001">
+              <button type="button" class="btn btn-secondary" onclick="handleDirectVoucherLookup()">Consultar</button>
+            </div>
+          </div>
+
+          <div id="voucherLookupResultBox" class="lookup-card" style="display: none;">
+            <div class="lookup-item"><span>Código:</span> <strong id="vlrCode">-</strong></div>
+            <div class="lookup-item"><span>Situação:</span> <span class="badge" id="vlrStatusBadge">-</span></div>
+            <div class="lookup-item"><span>Box:</span> <span id="vlrBox">-</span></div>
+            <div class="lookup-item"><span>Permissionário:</span> <span id="vlrPerm">-</span></div>
+            <div class="lookup-item"><span>Talão / Lote:</span> <span id="vlrBatch">-</span></div>
+            <div class="lookup-item"><span>Valor Emitido:</span> <span id="vlrValue">-</span></div>
+            <div class="lookup-item"><span>Doc Fiscal:</span> <span id="vlrDoc">-</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: PORTAL DO PERMISSIONÁRIO -->
+    <section id="tab-portal" class="tab-panel">
+      <div class="portal-header-card" style="background: #ffffff; border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+        <div class="portal-merchant-info">
+          <h2 id="portalPermName">Box 260 — Sulamita Ferreira Figueira</h2>
+          <p id="portalPermDetails" style="color: var(--text-muted); font-size: 0.9rem;">Atividade: Salão e Barbearia | Nível Sebrae: Nível 1 - Regular | Cadastro: ATIVO</p>
+        </div>
+      </div>
+
+      <div class="grid-2col">
+        <div class="content-card">
+          <h3>Emitir Comprovante de Compra</h3>
+          <p class="card-instruction">Registre a venda no box para liberar o comprovante com código e QR Token para o consumidor.</p>
+
+          <form id="portalIssueForm" onsubmit="handlePortalIssueSubmit(event)">
+            <div class="form-group">
+              <label for="portalVoucherCode">Código do Comprovante do seu Bloco *</label>
+              <input type="text" id="portalVoucherCode" placeholder="Ex: NATAL-00002" required value="NATAL-00002">
+            </div>
+            <div class="grid-2col">
+              <div class="form-group">
+                <label for="portalVoucherValue">Valor da Compra (R$) *</label>
+                <input type="number" id="portalVoucherValue" step="0.01" min="0.01" placeholder="50.00" required value="50.00">
+              </div>
+              <div class="form-group">
+                <label for="portalInvoiceDoc">Nº Doc Fiscal / Recibo (opcional)</label>
+                <input type="text" id="portalInvoiceDoc" placeholder="Ex: NF 1234" value="REC-101">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">🖨️ Emitir e Gerar QR Token</button>
+          </form>
+
+          <div id="portalIssueSuccessAlert" class="alert alert-success" style="display: none; margin-top: 1rem;">
+            <p id="portalIssueDetails"></p>
+          </div>
+        </div>
+
+        <div class="content-card">
+          <h3>Comunicar Ocorrência em Comprovante</h3>
+          <p class="card-instruction">Comunique folhas danificadas, extraviadas ou devolvidas para proteção da sua cota.</p>
+
+          <form id="portalIncidentForm" onsubmit="handlePortalIncidentSubmit(event)">
+            <div class="form-group">
+              <label for="incidentVoucherCode">Código do Comprovante *</label>
+              <input type="text" id="incidentVoucherCode" placeholder="Ex: NATAL-00050" required value="NATAL-00050">
+            </div>
+            <div class="form-group">
+              <label for="incidentType">Tipo de Ocorrência *</label>
+              <select id="incidentType" required>
+                <option value="EXTRAVIADO">Extraviado / Perdido</option>
+                <option value="CANCELADO">Danificado / Cancelado</option>
+                <option value="DEVOLVIDO">Devolvido à Administração</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="incidentReason">Justificativa *</label>
+              <textarea id="incidentReason" rows="2" placeholder="Descreva o ocorrido com a folha" required>Folha rasurada durante o atendimento</textarea>
+            </div>
+            <button type="submit" class="btn btn-warning">⚠️ Registrar Ocorrência</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 7: APURAÇÃO LOTERIA FEDERAL -->
+    <section id="tab-apuracao" class="tab-panel">
+      <div class="section-toolbar">
+        <div>
+          <h2>Apuração Oficial com Base na Loteria Federal</h2>
+          <p>Conforme Seção 8 do Prompt: <strong>sem gerador aleatório caseiro</strong>. Apuração determinística e auditável via extração oficial da CEF com hash SHA-256 da base.</p>
+        </div>
+      </div>
+
+      <div class="grid-2col">
+        <div class="content-card">
+          <h3>Registrar Resultado da Loteria Federal</h3>
+          <form id="federalDrawForm" onsubmit="handleFederalDrawSubmit(event)">
+            <div class="form-group">
+              <label for="drawCampaignSelect">Campanha para Apuração *</label>
+              <select id="drawCampaignSelect" required></select>
+            </div>
+
+            <div class="grid-2col">
+              <div class="form-group">
+                <label for="drawContest">Nº do Concurso Federal *</label>
+                <input type="text" id="drawContest" placeholder="Ex: 5900" required value="5900">
+              </div>
+              <div class="form-group">
+                <label for="drawPrizeTitle">Prêmio em Disputa *</label>
+                <input type="text" id="drawPrizeTitle" placeholder="Ex: Moto 160cc 0km" required value="Moto 160cc 0km">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>5 Prêmios Oficiais da Loteria Federal (Extração Oficial da CEF) *</label>
+              <div class="grid-5col">
+                <input type="text" id="drawP1" placeholder="1º: 24568" required maxlength="6" value="24568">
+                <input type="text" id="drawP2" placeholder="2º: 13492" required maxlength="6" value="13492">
+                <input type="text" id="drawP3" placeholder="3º: 56701" required maxlength="6" value="56701">
+                <input type="text" id="drawP4" placeholder="4º: 89234" required maxlength="6" value="89234">
+                <input type="text" id="drawP5" placeholder="5º: 07815" required maxlength="6" value="07815">
+              </div>
+              <small class="input-hint">Regra oficial: unidade simples do 1º ao 5º prêmio gera o número-alvo (ex: 8-2-1-4-5 = <strong>82145</strong>).</small>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg">🏆 Realizar Apuração e Identificar Ganhador</button>
+          </form>
+
+          <div id="drawResultAlert" class="alert alert-success" style="display: none; margin-top: 1.5rem;">
+            <h3>🎉 Ganhador Homologado!</h3>
+            <p id="drawWinnerLuckyNumber" style="font-size: 1.25rem; font-weight: 700;"></p>
+            <div id="drawWinnerDetails"></div>
+            <div class="hash-tag">SHA-256 da Base Congelada: <code id="drawSha256"></code></div>
+          </div>
+        </div>
+
+        <div class="content-card">
+          <h3>Histórico de Apurações e Entrega de Prêmios</h3>
+          <div class="table-responsive">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th>Campanha</th>
+                  <th>Concurso</th>
+                  <th>Nº Sorteado</th>
+                  <th>Ganhador</th>
+                  <th>Prêmio</th>
+                  <th>Situação</th>
+                </tr>
+              </thead>
+              <tbody id="drawHistoryTableBody">
+                <tr><td colspan="6" class="text-center">Nenhuma apuração realizada ainda nesta campanha.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 8: AUDITORIA -->
+    <section id="tab-auditoria" class="tab-panel">
+      <div class="section-toolbar">
+        <div>
+          <h2>Trilha de Auditoria Imutável</h2>
+          <p>Registro cronológico de todas as ações administrativas, decisões de revisão e validações de comprovantes.</p>
+        </div>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary" onclick="exportParticipationsCsv()">📥 Exportar Participações (CSV)</button>
+        </div>
+      </div>
+
+      <div class="content-card">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Horário</th>
+                <th>Usuário</th>
+                <th>Ação</th>
+                <th>Entidade</th>
+                <th>Ref ID</th>
+                <th>Detalhes Auditados</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="7" class="text-center">Nenhum registro de auditoria ainda.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 9: TESTES LOCAIS -->
+    <section id="tab-testes" class="tab-panel">
+      <div class="section-toolbar">
+        <div>
+          <h2>Bateria de Testes Locais e Validação em Tempo Real</h2>
+          <p>Execute testes automatizados diretamente no navegador para verificar a conformidade de todas as 8 fases do documento.</p>
+        </div>
+        <button class="btn btn-primary" onclick="runBrowserTestSuite()">▶️ Executar Todos os Testes no Navegador</button>
+      </div>
+
+      <div class="content-card">
+        <h3>Resultado da Execução dos Testes</h3>
+        <div id="testResultsLog" style="margin-top: 1rem; font-family: monospace; font-size: 0.9rem;">
+          <p style="color: var(--text-muted);">Clique no botão acima para rodar a suíte de testes na memória.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL: REVISÃO DE STAGING -->
+  <div id="modalReviewStaging" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <h3>Decisão de Revisão Cadastral</h3>
+      <p id="modalStagingInfo">Revisando item da planilha</p>
+
+      <form id="formReviewStaging" onsubmit="handleReviewSubmit(event)">
+        <input type="hidden" id="modalStagingId">
+
+        <div class="form-group">
+          <label for="reviewDecision">Decisão do Administrador *</label>
+          <select id="reviewDecision" required>
+            <option value="APROVADO">Aprovar Cadastro (Confirmar Box e Permissionário)</option>
+            <option value="REJEITADO">Rejeitar (Informação Inválida)</option>
+            <option value="CONCILIADO">Conciliar com Ajuste Manual</option>
+          </select>
+        </div>
+
+        <div class="grid-2col" id="reviewExtraFields">
+          <div class="form-group">
+            <label for="reviewBoxNumber">Número do Box Confirmado</label>
+            <input type="text" id="reviewBoxNumber">
+          </div>
+          <div class="form-group">
+            <label for="reviewPermName">Nome do Permissionário Confirmado</label>
+            <input type="text" id="reviewPermName">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="reviewIsVago">
+            Marcar como Box VAGO CONFIRMADO (sem permissionário atribuído)
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="reviewJustification">Justificativa da Decisão (Obrigatória para Auditoria) *</label>
+          <textarea id="reviewJustification" rows="3" required placeholder="Ex: Verificado presencialmente com o Termo de Permissão nº..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalReviewStaging')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Registrar Decisão</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: APROVAÇÕES LEGAIS DA CAMPANHA -->
+  <div id="modalLegalApprovals" class="modal-backdrop" style="display: none;">
+    <div class="modal-box modal-lg">
+      <h3>Checklist Jurídico e Operacional de Campanha</h3>
+      <p>Conforme Seção 11 do Prompt, a campanha só pode ser ativada com todos os 6 itens confirmados.</p>
+
+      <form id="formLegalApprovals" onsubmit="handleLegalApprovalsSubmit(event)">
+        <input type="hidden" id="modalLegalCampaignId">
+
+        <div class="grid-2col">
+          <div class="form-group">
+            <label for="legalPromoterName">Promotor Legal da Campanha *</label>
+            <input type="text" id="legalPromoterName" placeholder="Ex: Prefeitura Municipal de Barcarena / SEMAGRI" required value="Prefeitura Municipal de Barcarena — SEMAGRI">
+          </div>
+          <div class="form-group">
+            <label for="legalPromoterDoc">CNPJ / Documento do Promotor *</label>
+            <input type="text" id="legalPromoterDoc" placeholder="05.105.200/0001-22" required value="05.105.200/0001-22">
+          </div>
+        </div>
+
+        <div class="checklist-grid">
+          <label class="checklist-item">
+            <input type="checkbox" id="chkPromoter" required checked>
+            <span><strong>1. Promotor Legal:</strong> Promotor formalmente identificado e com elegibilidade jurídica declarada.</span>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chkParticipants" required checked>
+            <span><strong>2. Regularidade dos Boxes:</strong> Permissionários participantes regulares perante a SEMAGRI e termo de uso.</span>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chkPrizes" required checked>
+            <span><strong>3. Financiamento dos Prêmios:</strong> Origem dos recursos dos prêmios documentalmente comprovada.</span>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chkRules" required checked>
+            <span><strong>4. Regulamento Aprovado:</strong> Modalidade e regulamento formalmente homologados com regras de apuração.</span>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chkLgpd" required checked>
+            <span><strong>5. LGPD & Privacidade:</strong> Termo de consentimento e tratamento mínimo de dados pessoais assegurados.</span>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chkElectoral" required checked>
+            <span><strong>6. Calendário Eleitoral:</strong> Ausência de vedações da legislação eleitoral verificada para a vigência.</span>
+          </label>
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
+          <label for="legalJustification">Parecer / Justificativa da Homologação *</label>
+          <textarea id="legalJustification" rows="2" required>Processo Administrativo SEMAGRI nº 2026/089. Todos os 6 requisitos cumpridos.</textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalLegalApprovals')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Homologar Conformidade Legal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: NOVA CAMPANHA -->
+  <div id="modalNewCampaign" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <h3>Criar Nova Campanha</h3>
+      <form id="formNewCampaign" onsubmit="handleNewCampaignSubmit(event)">
+        <div class="form-group">
+          <label for="campName">Nome da Campanha *</label>
+          <input type="text" id="campName" placeholder="Ex: Natal Premiado no Complexo" required value="Sorteio de Fim de Ano 2026">
+        </div>
+        <div class="form-group">
+          <label for="campDesc">Descrição</label>
+          <textarea id="campDesc" rows="2" placeholder="Promoção de fim de ano para compras nos boxes do Complexo">Campanha para ativação do comércio no Complexo Comercial.</textarea>
+        </div>
+        <div class="grid-2col">
+          <div class="form-group">
+            <label for="campStart">Início da Campanha *</label>
+            <input type="date" id="campStart" required value="2026-11-01">
+          </div>
+          <div class="form-group">
+            <label for="campEnd">Fim da Campanha *</label>
+            <input type="date" id="campEnd" required value="2026-12-31">
+          </div>
+        </div>
+        <div class="grid-2col">
+          <div class="form-group">
+            <label for="campPurchaseStart">Início Compras *</label>
+            <input type="date" id="campPurchaseStart" required value="2026-11-01">
+          </div>
+          <div class="form-group">
+            <label for="campPurchaseEnd">Fim Compras *</label>
+            <input type="date" id="campPurchaseEnd" required value="2026-12-24">
+          </div>
+        </div>
+        <div class="grid-2col">
+          <div class="form-group">
+            <label for="campRegEnd">Fim do Cadastro de Cupons *</label>
+            <input type="date" id="campRegEnd" required value="2026-12-28">
+          </div>
+          <div class="form-group">
+            <label for="campMinValue">Valor Mínimo Compra (R$) *</label>
+            <input type="number" id="campMinValue" value="20.00" step="1.0" min="1.0" required>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modalNewCampaign')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Criar em Elaboração</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
