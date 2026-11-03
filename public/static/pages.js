@@ -992,6 +992,13 @@ Pages.guia = async (root) => {
         <tr><td>${chip('SEM_REGISTRO', 'Inexistente')}</td><td>O código não existe. Confira a digitação.</td></tr></tbody></table></section>
     </div>
     ${S.info && S.info.demo_mode ? `<section class="panel" style="margin-top:16px"><h2 style="margin-bottom:8px">Sobre este ambiente de demonstração</h2>
-      <p>A campanha piloto e as contas de teste existem só para conhecer o sistema. O comprovante <b>NATAL-00001</b> até <b>NATAL-00050</b> pertence ao Box 260 e pode ser usado no balcão. ${S.info.ephemeral_database ? 'Os dados são temporários: quando o servidor reinicia, tudo volta ao estado inicial.' : ''}</p>
+      <p>Todos os dados são <b>fictícios</b> e servem só para conhecer o sistema:</p>
+      <ul style="margin:0 0 10px;padding-left:20px">
+        <li><b>Campanha Piloto</b> (ativa): 24 boxes com talões, cerca de 230 números da sorte nos últimos 14 dias, recusas e ocorrências.</li>
+        <li><b>Dia das Mães 2026</b> (encerrada): base congelada, dois prêmios apurados — um entregue e outro em contato. Use para ver a apuração e emitir a ata.</li>
+        <li><b>Volta às Aulas 2027</b> (aguardando aprovação) e <b>Festival do Abacaxi 2027</b> (em elaboração): mostram as etapas pendentes.</li>
+        <li>Conferência da planilha: as linhas sem divergência já foram aprovadas; ficaram pendentes as que têm box repetido ou nome em branco.</li>
+        <li>Três permissionários estão suspensos para mostrar os bloqueios.</li></ul>
+      <p>Os comprovantes <b>NATAL-00001</b> a <b>NATAL-00050</b> do Box 260 estão livres para você testar o balcão. ${S.info.ephemeral_database ? 'Quando o servidor reinicia, tudo volta a este estado inicial.' : ''}</p>
       <p class="muted">Para testar um CPF, use um número válido como 529.982.247-25.</p></section>` : ''}`;
 };

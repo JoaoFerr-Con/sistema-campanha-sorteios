@@ -163,3 +163,10 @@ def bootstrap_initial_data(db: Session, import_staging: bool = False):
         if path.exists():
             from app.services.box_service import import_spreadsheet_to_staging
             import_spreadsheet_to_staging(db, path, user_id=None)
+    if import_staging:
+        from app.core.demo_data import populate_demo
+        try:
+            populate_demo(db)
+        except Exception:  # a demonstração não pode impedir o sistema de subir
+            db.rollback()
+            log.exception("Falha ao gerar a carga de demonstração")

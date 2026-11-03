@@ -79,8 +79,22 @@ anulação, ata e exportações.
 | Atendente | `atendente` | `password123` | Balcão e consulta de comprovantes |
 | Permissionário | `permissionario_260` | `password123` | Portal do Box 260 |
 
-A campanha piloto já vem ativa com os comprovantes `NATAL-00001` a `NATAL-00050` (Box 260).
-Para testar o balcão, use um CPF válido, como `529.982.247-25`.
+Há também `atendente2` (mesma senha), do turno da tarde.
+
+### Dados de demonstração
+
+Com `DEMO_MODE=true`, o primeiro acesso gera uma carga **fictícia** (`app/core/demo_data.py`):
+
+| O quê | Para ver |
+|---|---|
+| Campanha Piloto (ativa) com 24 boxes, ~230 números da sorte em 14 dias, recusas e ocorrências | Painel, Balcão, Talões |
+| Dia das Mães 2026 (encerrada), base congelada, 2 prêmios apurados, entrega registrada | Apuração, ata, auditoria |
+| Volta às Aulas 2027 (aguardando aprovação) e Festival do Abacaxi 2027 (em elaboração) | Campanhas e etapas |
+| Planilha conferida: 264 boxes confirmados; linhas com divergência pendentes | Mapa dos boxes, Conferência |
+| 3 permissionários suspensos | Bloqueios no balcão e em talões |
+
+Os comprovantes `NATAL-00001` a `NATAL-00050` (Box 260) ficam livres para testar o balcão.
+Use um CPF válido, como `529.982.247-25`.
 
 ---
 
