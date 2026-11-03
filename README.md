@@ -24,6 +24,10 @@ validação jurídica estão em **[DIAGNOSTICO.md](DIAGNOSTICO.md)**. Leia antes
    * `SECRET_KEY` = uma chave longa e aleatória (`python -c "import secrets;print(secrets.token_urlsafe(48))"`)
 4. Clique em **Deploy**. Ao abrir o endereço, a tela de entrada mostra os três perfis de teste.
 
+> **Várias instâncias:** a Vercel pode atender requisições em cópias diferentes do servidor. Sem
+> `DATABASE_URL`, cada cópia tem o próprio banco temporário — um número da sorte gerado numa cópia pode
+> não aparecer na outra. Para uma demonstração com vários usuários ao mesmo tempo, conecte o Postgres.
+
 > **Importante:** sem `DATABASE_URL`, a Vercel guarda o banco em `/tmp`, que é **apagado quando a
 > função reinicia** (depois de alguns minutos sem uso ou a cada novo deploy). Para uma demonstração
 > rápida, isso basta — o sistema avisa na tela. Para homologação com dados que persistem:

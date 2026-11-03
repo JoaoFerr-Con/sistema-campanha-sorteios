@@ -48,12 +48,18 @@ def _database_url() -> str:
 
 
 DEMO_MODE = _bool_env("DEMO_MODE", True)
+SECRET_KEY_IS_DERIVED = False
 _secret = os.getenv("SECRET_KEY", "").strip()
 if not _secret:
     if not DEMO_MODE:
         raise RuntimeError("SECRET_KEY é obrigatório quando DEMO_MODE=false.")
-    # Em demonstração, uma chave aleatória por processo: tokens deixam de valer ao reiniciar.
-    _secret = secrets.token_urlsafe(48)
+    # Demonstração sem SECRET_KEY: chave derivada do deploy, igual em todas as instâncias da Vercel.
+    # (Uma chave aleatória por processo fazia a sessão cair quando a requisição caía em outra instância.)
+    # As contas de demonstração têm senhas públicas, então isto não reduz a proteção do ambiente de teste.
+    import hashlib
+    _seed = "|".join(os.getenv(k, "") for k in ("VERCEL_PROJECT_ID", "VERCEL_DEPLOYMENT_ID", "VERCEL_GIT_COMMIT_SHA", "VERCEL_URL"))
+    _secret = hashlib.sha256(f"campanhas-barcarena-demo|{_seed or 'local'}".encode()).hexdigest()
+    SECRET_KEY_IS_DERIVED = True
 
 
 class Settings(BaseModel):
