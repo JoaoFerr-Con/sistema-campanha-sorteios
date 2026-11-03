@@ -26,6 +26,11 @@ ACTION_LABELS = {
     "DRAW_EXECUTED_LOTERIA_FEDERAL": "Apuração registrada", "DRAW_ANNULLED": "Apuração anulada",
     "PRIZE_DELIVERY_UPDATED": "Entrega de prêmio atualizada",
     "EXPORT_PERSONAL_DATA": "Exportação com dados pessoais",
+    "PERMISSIONARIO_CREATED": "Permissionário cadastrado",
+    "BOX_HOLDER_ASSIGNED": "Titular vinculado ao box",
+    "BOX_HOLDER_TRANSFERRED": "Troca de titular do box",
+    "BOX_HOLDER_RELEASED": "Vínculo do box encerrado",
+    "BOX_UPDATED": "Box alterado",
 }
 
 

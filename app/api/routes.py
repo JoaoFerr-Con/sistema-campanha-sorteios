@@ -18,6 +18,7 @@ from app.schemas.dto import (
     CampaignLegalApprovalRequest, CampaignStatusTransitionRequest, VoucherBatchCreateRequest, BatchCancelRequest,
     ValidateAndIssueLuckyNumberRequest, VoucherIssueRequest, VoucherIncidentRequest, FederalLotteryDrawRequest,
     FreezeBaseRequest, DrawAnnulRequest, PrizeDeliveryUpdateRequest,
+    PermissionarioCreateFullRequest, BoxAssignRequest, BoxReleaseRequest, BoxUpdateRequest,
 )
 from app.services import (
     auth_service, box_service, campaign_service, voucher_service, attendance_service, portal_service,
@@ -168,6 +169,37 @@ def get_box_map(payload: dict = Depends(STAFF), db: Session = Depends(get_db)):
     return box_service.get_box_map(db)
 
 
+@api_router.get("/activities")
+def list_activities(payload: dict = Depends(STAFF), db: Session = Depends(get_db)):
+    return box_service.list_activities(db)
+
+
+@api_router.get("/boxes/{box_number}/detail")
+def get_box_detail(box_number: str, payload: dict = Depends(ADMIN), db: Session = Depends(get_db)):
+    return box_service.box_detail(db, box_number)
+
+
+@api_router.patch("/boxes/{box_number}")
+def update_box(box_number: str, body: BoxUpdateRequest, payload: dict = Depends(ADMIN), db: Session = Depends(get_db)):
+    b = box_service.update_box(db, box_number, body.model_dump(), payload["user_id"], payload["username"])
+    return {"status": "success", "box_number": b.box_number, "official_status": b.official_status}
+
+
+@api_router.post("/boxes/{box_number}/holder")
+def assign_box_holder(box_number: str, body: BoxAssignRequest, payload: dict = Depends(ADMIN), db: Session = Depends(get_db)):
+    occ = box_service.assign_box(db, box_number, body.permissionario_id, body.activity_name, body.authorization_term_ref,
+                                 body.justification, payload["user_id"], payload["username"],
+                                 acknowledge_outstanding=body.acknowledge_outstanding)
+    return {"status": "success", "box_number": box_number, "permissionario_id": occ.permissionario_id}
+
+
+@api_router.post("/boxes/{box_number}/release")
+def release_box_holder(box_number: str, body: BoxReleaseRequest, payload: dict = Depends(ADMIN), db: Session = Depends(get_db)):
+    b = box_service.release_box(db, box_number, body.target_status, body.justification, payload["user_id"],
+                                payload["username"], acknowledge_outstanding=body.acknowledge_outstanding)
+    return {"status": "success", "box_number": b.box_number, "official_status": b.official_status}
+
+
 @api_router.get("/boxes")
 def list_boxes(status: Optional[str] = None, payload: dict = Depends(STAFF), db: Session = Depends(get_db)):
     query = db.query(Box)
@@ -214,6 +246,12 @@ def list_permissionarios(q: Optional[str] = None, status: Optional[str] = None, 
                             "activities": sorted({x.activity_name for x in p.occupancies if x.is_current}),
                             "has_portal_user": bool(p.user)})
     return out
+
+
+@api_router.post("/permissionarios")
+def create_permissionario(body: PermissionarioCreateFullRequest, payload: dict = Depends(ADMIN), db: Session = Depends(get_db)):
+    p = box_service.create_permissionario(db, body.model_dump(), payload["user_id"], payload["username"])
+    return {"status": "success", "id": p.id, "name": p.name}
 
 
 @api_router.get("/permissionarios/{perm_id}")

@@ -244,3 +244,228 @@ def update_permissionario(db: Session, perm_id: int, data: Dict[str, Any], user_
     db.commit()
     db.refresh(perm)
     return perm
+
+
+# ---------------------------------------------------------------- gestão manual de permissionários e boxes
+
+BOX_STATUSES = {"CONFIRMADO", "VAGO_CONFIRMADO", "EM_REGULARIZACAO", "SEM_USO"}
+
+
+def _validate_box_number(box_number: str) -> str:
+    n = (box_number or "").strip()
+    if not n.isdigit() or not (1 <= int(n) <= TOTAL_MAP_BOXES):
+        raise DomainRuleException(f"O box precisa ser um número entre 1 e {TOTAL_MAP_BOXES} (mapa oficial).")
+    return str(int(n))
+
+
+def _get_or_create_box(db: Session, box_number: str) -> Box:
+    n = _validate_box_number(box_number)
+    box = db.query(Box).filter(Box.box_number == n).first()
+    if not box:
+        box = Box(box_number=n, official_status="EM_REGULARIZACAO", notes="Criado por cadastro manual.")
+        db.add(box)
+        db.flush()
+    return box
+
+
+def _ensure_activity(db: Session, name: str) -> str:
+    act = (name or "").strip().upper()
+    if not act:
+        raise DomainRuleException("Informe a atividade comercial do box.")
+    if not db.query(Activity).filter(Activity.name == act).first():
+        db.add(Activity(name=act))
+        db.flush()
+    return act
+
+
+def _current_occupancy(db: Session, box_id: int) -> Optional[BoxOccupancy]:
+    return db.query(BoxOccupancy).filter(BoxOccupancy.box_id == box_id, BoxOccupancy.is_current == True).first()
+
+
+def _outstanding_vouchers(db: Session, box_id: int, permissionario_id: int) -> int:
+    """Comprovantes do titular atual ainda não utilizados em campanhas aprovadas ou ativas."""
+    from app.models.entities import Voucher, Campaign
+    return (db.query(Voucher).join(Campaign, Campaign.id == Voucher.campaign_id)
+            .filter(Voucher.box_id == box_id, Voucher.permissionario_id == permissionario_id,
+                    Voucher.status.in_(["DISTRIBUIDO", "EMITIDO"]), Campaign.status.in_(["APROVADA", "ATIVA"]))
+            .count())
+
+
+def list_activities(db: Session) -> List[str]:
+    names = {a.name for a in db.query(Activity).all()}
+    names |= {o.activity_name for o in db.query(BoxOccupancy.activity_name).distinct().all() if o.activity_name}
+    return sorted(names)
+
+
+def create_permissionario(db: Session, data: Dict[str, Any], user_id: int, username: str) -> Permissionario:
+    name = _clean_name(data.get("name"))
+    if len(name) < 3:
+        raise DomainRuleException("Informe o nome completo do permissionário.")
+    doc = "".join(ch for ch in (data.get("document_cpf_cnpj") or "") if ch.isdigit()) or None
+    if doc and len(doc) not in (11, 14):
+        raise DomainRuleException("O CPF deve ter 11 dígitos ou o CNPJ 14 dígitos.")
+    if db.query(Permissionario).filter(func.lower(Permissionario.name) == name.lower()).first():
+        raise DomainRuleException(f"Já existe um permissionário chamado '{name}'. Abra o cadastro existente.", status_code=409)
+    if doc and db.query(Permissionario).filter(Permissionario.document_cpf_cnpj == doc).first():
+        raise DomainRuleException("Já existe um permissionário com este CPF/CNPJ.", status_code=409)
+    perm = Permissionario(name=name, document_cpf_cnpj=doc, phone=(data.get("phone") or "").strip() or None,
+                          email=(data.get("email") or "").strip().lower() or None,
+                          status=data.get("status") or "ATIVO",
+                          sebrae_qualification_level=data.get("sebrae_qualification_level") or "NIVEL_1_REGULAR")
+    db.add(perm)
+    db.flush()
+    log_audit(db, "PERMISSIONARIO_CREATED", "Permissionario", entity_id=perm.id, user_id=user_id, username=username,
+              after_state={"name": name, "document": doc, "status": perm.status, "origin": "cadastro manual",
+                           "justification": data.get("justification")})
+    if data.get("box_number"):
+        assign_box(db, data["box_number"], perm.id, data.get("activity_name"), data.get("authorization_term_ref"),
+                   data.get("justification") or "Cadastro de novo permissionário", user_id, username,
+                   acknowledge_outstanding=bool(data.get("acknowledge_outstanding")), commit=False)
+    db.commit()
+    db.refresh(perm)
+    return perm
+
+
+def assign_box(db: Session, box_number: str, permissionario_id: int, activity_name: Optional[str],
+               authorization_term_ref: Optional[str], justification: str, user_id: int, username: str,
+               acknowledge_outstanding: bool = False, commit: bool = True) -> BoxOccupancy:
+    """Vincula um permissionário ao box. Se houver titular, encerra o vínculo anterior (troca de titular)."""
+    if not justification or len(justification.strip()) < 5:
+        raise DomainRuleException("Informe a justificativa (ex.: número do termo de permissão ou processo).")
+    perm = db.query(Permissionario).filter(Permissionario.id == permissionario_id).first()
+    if not perm:
+        raise DomainRuleException("Permissionário não encontrado.", status_code=404)
+    box = _get_or_create_box(db, box_number)
+    if box.official_status == "SEM_USO":
+        raise DomainRuleException("Este box está marcado como sem uso. Altere a situação do box antes de vinculá-lo.")
+    current = _current_occupancy(db, box.id)
+    if current and current.permissionario_id == permissionario_id:
+        raise DomainRuleException(f"{perm.name} já é o titular do Box {box.box_number}.")
+    activity = _ensure_activity(db, activity_name or (current.activity_name if current else ""))
+
+    previous = None
+    if current:
+        pending = _outstanding_vouchers(db, box.id, current.permissionario_id)
+        if pending and not acknowledge_outstanding:
+            raise DomainRuleException(
+                f"O titular atual ({current.permissionario.name}) ainda tem {pending} comprovante(s) não utilizado(s) "
+                "em campanhas em andamento. Eles continuam válidos em nome dele. Confirme a troca para prosseguir, "
+                "ou cancele o lote antes.", status_code=409)
+        previous = {"permissionario": current.permissionario.name, "activity": current.activity_name,
+                    "since": current.start_date.isoformat(), "pending_vouchers": pending}
+        current.is_current = False
+        current.end_date = datetime.utcnow()
+
+    occ = BoxOccupancy(box_id=box.id, permissionario_id=perm.id, activity_name=activity, is_current=True,
+                       authorization_term_ref=(authorization_term_ref or "").strip() or None)
+    db.add(occ)
+    before_status = box.official_status
+    box.official_status = "CONFIRMADO" if perm.status == "ATIVO" else "EM_REGULARIZACAO"
+    log_audit(db, "BOX_HOLDER_TRANSFERRED" if previous else "BOX_HOLDER_ASSIGNED", "Box", entity_id=box.box_number,
+              user_id=user_id, username=username,
+              before_state={"status": before_status, "holder": previous},
+              after_state={"status": box.official_status, "holder": perm.name, "activity": activity,
+                           "term": occ.authorization_term_ref, "justification": justification})
+    if commit:
+        db.commit()
+        db.refresh(occ)
+    else:
+        db.flush()
+    return occ
+
+
+def release_box(db: Session, box_number: str, target_status: str, justification: str, user_id: int, username: str,
+                acknowledge_outstanding: bool = False) -> Box:
+    """Encerra o vínculo vigente (o histórico é preservado) e marca o box como vago ou sem uso."""
+    if target_status not in ("VAGO_CONFIRMADO", "SEM_USO", "EM_REGULARIZACAO"):
+        raise DomainRuleException("Situação inválida para um box sem titular.")
+    if not justification or len(justification.strip()) < 5:
+        raise DomainRuleException("Informe a justificativa.")
+    n = _validate_box_number(box_number)
+    box = db.query(Box).filter(Box.box_number == n).first()
+    if not box:
+        raise DomainRuleException("Box sem cadastro oficial.", status_code=404)
+    current = _current_occupancy(db, box.id)
+    if not current:
+        raise DomainRuleException("Este box não tem titular vigente.")
+    pending = _outstanding_vouchers(db, box.id, current.permissionario_id)
+    if pending and not acknowledge_outstanding:
+        raise DomainRuleException(
+            f"{current.permissionario.name} ainda tem {pending} comprovante(s) não utilizado(s) em campanhas em andamento. "
+            "Confirme para encerrar o vínculo mesmo assim, ou cancele o lote antes.", status_code=409)
+    current.is_current = False
+    current.end_date = datetime.utcnow()
+    before = box.official_status
+    box.official_status = target_status
+    log_audit(db, "BOX_HOLDER_RELEASED", "Box", entity_id=box.box_number, user_id=user_id, username=username,
+              before_state={"status": before, "holder": current.permissionario.name, "activity": current.activity_name},
+              after_state={"status": target_status, "holder": None, "pending_vouchers": pending,
+                           "justification": justification})
+    db.commit()
+    db.refresh(box)
+    return box
+
+
+def update_box(db: Session, box_number: str, data: Dict[str, Any], user_id: int, username: str) -> Box:
+    """Altera a situação, a atividade do titular vigente, o setor ou as observações do box."""
+    if not data.get("justification") or len(data["justification"].strip()) < 5:
+        raise DomainRuleException("Informe a justificativa.")
+    box = _get_or_create_box(db, box_number)
+    current = _current_occupancy(db, box.id)
+    before = {"status": box.official_status, "sector": box.sector, "notes": box.notes,
+              "activity": current.activity_name if current else None}
+    status = data.get("official_status")
+    if status:
+        if status not in BOX_STATUSES:
+            raise DomainRuleException("Situação de box inválida.")
+        if status == "CONFIRMADO" and not current:
+            raise DomainRuleException("Para confirmar o box, vincule um permissionário titular.")
+        if status in ("VAGO_CONFIRMADO", "SEM_USO") and current:
+            raise DomainRuleException("O box tem titular vigente. Use 'Encerrar vínculo' para deixá-lo vago.")
+        if status == "CONFIRMADO" and current and current.permissionario.status != "ATIVO":
+            raise DomainRuleException(f"O titular está com cadastro {current.permissionario.status}. "
+                                      "Regularize o permissionário antes de confirmar o box.")
+        box.official_status = status
+    if data.get("activity_name"):
+        if not current:
+            raise DomainRuleException("A atividade pertence ao vínculo com o titular; este box não tem titular.")
+        current.activity_name = _ensure_activity(db, data["activity_name"])
+    if data.get("sector") is not None:
+        box.sector = data["sector"].strip() or None
+    if data.get("notes") is not None:
+        box.notes = data["notes"].strip() or None
+    after = {"status": box.official_status, "sector": box.sector, "notes": box.notes,
+             "activity": current.activity_name if current else None, "justification": data["justification"]}
+    log_audit(db, "BOX_UPDATED", "Box", entity_id=box.box_number, user_id=user_id, username=username,
+              before_state=before, after_state=after)
+    db.commit()
+    db.refresh(box)
+    return box
+
+
+def box_detail(db: Session, box_number: str) -> Dict[str, Any]:
+    from app.models.entities import AuditLog
+    n = _validate_box_number(box_number)
+    box = db.query(Box).filter(Box.box_number == n).first()
+    staging = db.query(ImportStagingRow).filter(ImportStagingRow.raw_box_number == n).order_by(ImportStagingRow.row_number).all()
+    logs = db.query(AuditLog).filter(AuditLog.entity_name == "Box", AuditLog.entity_id == n).order_by(AuditLog.id.desc()).all()
+    occs = sorted(box.occupancies, key=lambda o: o.start_date, reverse=True) if box else []
+    current = next((o for o in occs if o.is_current), None)
+    return {
+        "box_number": n,
+        "registered": bool(box),
+        "status": box.official_status if box else ("PENDENTE_CONFERENCIA" if any(r.status == "PENDENTE_REVISAO" for r in staging) else "SEM_REGISTRO"),
+        "sector": box.sector if box else None,
+        "notes": box.notes if box else None,
+        "current": {"permissionario_id": current.permissionario_id, "permissionario": current.permissionario.name,
+                    "permissionario_status": current.permissionario.status, "activity": current.activity_name,
+                    "since": current.start_date.isoformat(), "term": current.authorization_term_ref,
+                    "pending_vouchers": _outstanding_vouchers(db, box.id, current.permissionario_id)} if current else None,
+        "holders": [{"permissionario_id": o.permissionario_id, "permissionario": o.permissionario.name, "activity": o.activity_name,
+                     "start_date": o.start_date.isoformat(), "end_date": o.end_date.isoformat() if o.end_date else None,
+                     "is_current": o.is_current, "term": o.authorization_term_ref} for o in occs],
+        "staging_rows": [{"id": r.id, "row_number": r.row_number, "name": r.raw_permissionario_name, "activity": r.raw_activity,
+                          "status": r.status, "flags": json.loads(r.discrepancy_flags or "[]")} for r in staging],
+        "history": [{"timestamp": l.created_at.isoformat(), "username": l.username or "SISTEMA", "action": l.action,
+                     "before": l.before_state_json, "after": l.after_state_json} for l in logs],
+    }

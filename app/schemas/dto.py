@@ -199,3 +199,36 @@ class UserActiveRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)
+
+
+class PermissionarioCreateFullRequest(BaseModel):
+    name: str = Field(..., min_length=3, max_length=160)
+    document_cpf_cnpj: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    status: str = Field("ATIVO", pattern="^(ATIVO|SUSPENSO|INATIVO|BLOQUEADO)$")
+    sebrae_qualification_level: Optional[str] = None
+    box_number: Optional[str] = None
+    activity_name: Optional[str] = None
+    authorization_term_ref: Optional[str] = None
+    justification: str = Field(..., min_length=5)
+    acknowledge_outstanding: bool = False
+
+class BoxAssignRequest(BaseModel):
+    permissionario_id: int
+    activity_name: Optional[str] = None
+    authorization_term_ref: Optional[str] = None
+    justification: str = Field(..., min_length=5)
+    acknowledge_outstanding: bool = False
+
+class BoxReleaseRequest(BaseModel):
+    target_status: str = Field("VAGO_CONFIRMADO", pattern="^(VAGO_CONFIRMADO|SEM_USO|EM_REGULARIZACAO)$")
+    justification: str = Field(..., min_length=5)
+    acknowledge_outstanding: bool = False
+
+class BoxUpdateRequest(BaseModel):
+    official_status: Optional[str] = Field(None, pattern="^(CONFIRMADO|VAGO_CONFIRMADO|EM_REGULARIZACAO|SEM_USO)$")
+    activity_name: Optional[str] = None
+    sector: Optional[str] = None
+    notes: Optional[str] = None
+    justification: str = Field(..., min_length=5)

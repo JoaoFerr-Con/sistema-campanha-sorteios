@@ -564,7 +564,7 @@ async function boxMapTab(body) {
   body.innerHTML = loadingBlock(6);
   const map = await api('/boxes/map');
   const counts = {}; map.forEach((b) => { counts[b.status] = (counts[b.status] || 0) + 1; });
-  body.innerHTML = `${howto('Como ler o mapa', ['Cada quadrado é um box, numerado de 1 a 368.', 'A cor indica a situação oficial. Amarelo significa que a linha da planilha ainda precisa ser conferida.', 'Um traço vermelho embaixo indica divergência na planilha (box repetido, sem nome etc.).', 'Clique em um box para ver os detalhes. Só boxes <b>confirmados</b> recebem talões.'])}
+  body.innerHTML = `${howto('Como ler o mapa', ['Cada quadrado é um box, numerado de 1 a 368.', 'A cor indica a situação oficial. Amarelo significa que a linha da planilha ainda precisa ser conferida.', 'Um traço vermelho embaixo indica divergência na planilha (box repetido, sem nome etc.).', 'Clique em um box para ver o titular e o histórico, <b>vincular ou trocar o titular</b>, encerrar o vínculo ou mudar a situação. Só boxes <b>confirmados</b> recebem talões.'])}
     <section class="panel"><div class="filters"><div class="field"><label for="mq">Localizar</label><input id="mq" placeholder="Número do box, nome ou atividade"></div>
       <div class="field"><label for="ms">Situação</label><select id="ms"><option value="">Todas</option>${BOX_LEGEND.map(([k, l]) => `<option value="${k}">${l} (${counts[k] || 0})</option>`).join('')}</select></div></div>
       <div class="legend" style="margin:0 0 14px">${BOX_LEGEND.map(([k, l]) => `<span><i class="bx-${k}" style="border:1px solid #c4cfd5"></i>${l} <b class="num">${counts[k] || 0}</b></span>`).join('')}</div>
@@ -578,30 +578,25 @@ async function boxMapTab(body) {
     });
   };
   $('#mq').addEventListener('input', debounce(filter, 200)); $('#ms').onchange = filter;
-  $$('#bm button').forEach((btn) => btn.onclick = () => {
-    const b = map[+btn.dataset.i];
-    const d = openDrawer(`Box ${b.box_number}`, `<dl class="kv"><dt>Situação</dt><dd>${chip(b.status)}</dd><dt>Permissionário</dt><dd>${esc(b.permissionario || '—')} ${b.permissionario_status && b.permissionario_status !== 'ATIVO' ? chip(b.permissionario_status) : ''}</dd>
-      <dt>Atividade</dt><dd>${esc(b.activity || '—')}</dd><dt>Linhas pendentes</dt><dd>${b.pending_rows}</dd><dt>Divergências</dt><dd>${b.flags.length ? b.flags.map((f) => `<span class="chip bad">${esc(FLAG_TXT[f] || f)}</span>`).join(' ') : 'Nenhuma'}</dd></dl>
-      <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap">${b.permissionario_id ? `<button class="btn btn-secondary" data-perm="${b.permissionario_id}">Abrir cadastro</button>` : ''}${b.pending_rows ? `<button class="btn btn-primary" data-conf="${b.box_number}">Conferir planilha</button>` : ''}</div>`);
-    if ($('[data-perm]', d)) $('[data-perm]', d).onclick = () => permDrawer(b.permissionario_id);
-    if ($('[data-conf]', d)) $('[data-conf]', d).onclick = () => { closeOverlay(); $('.tabs button[data-tab="conf"]').click(); setTimeout(() => { const q = $('#sq'); if (q) { q.value = b.box_number; q.dispatchEvent(new Event('input')); } }, 100); };
-  });
+  $$('#bm button').forEach((btn) => btn.onclick = () => boxDrawer(map[+btn.dataset.i].box_number, () => boxMapTab(body)));
 }
 async function permListTab(body) {
   body.innerHTML = `<div class="filters"><div class="field"><label for="pq">Buscar</label><input id="pq" placeholder="Nome ou número do box"></div>
     <div class="field"><label for="pst">Situação</label><select id="pst"><option value="">Todas</option>${['ATIVO', 'SUSPENSO', 'INATIVO', 'BLOQUEADO'].map((s) => `<option value="${s}">${statusLabel(s)}</option>`).join('')}</select></div>
-    <button class="btn btn-secondary" id="pexp">${icon('baixar')}Exportar Excel</button></div><div id="pl">${loadingBlock(5)}</div>`;
+    <button class="btn btn-secondary" id="pexp">${icon('baixar')}Exportar Excel</button>
+    <button class="btn btn-primary" id="pnew">${icon('mais')}Novo permissionário</button></div><div id="pl">${loadingBlock(5)}</div>`;
   const load = async () => {
     const qs = new URLSearchParams(); if ($('#pq').value.trim()) qs.set('q', $('#pq').value.trim()); if ($('#pst').value) qs.set('status', $('#pst').value);
     try {
       const rows = await api(`/permissionarios?${qs}`);
       $('#pl').innerHTML = rows.length ? `<div class="table-wrap"><table><thead><tr><th>Permissionário</th><th>Boxes</th><th>Atividade</th><th>Situação</th><th>Portal</th></tr></thead><tbody>
         ${rows.map((p) => `<tr class="clickable" data-id="${p.id}" tabindex="0"><td><b>${esc(p.name)}</b></td><td class="num">${esc(p.boxes.join(', ') || '—')}</td><td>${esc(p.activities.join(', ') || '—')}</td><td>${chip(p.status)}</td><td>${p.has_portal_user ? '<span class="chip agua">Com acesso</span>' : '<small>Sem acesso</small>'}</td></tr>`).join('')}</tbody></table></div>`
-        : emptyState('Nenhum permissionário encontrado.', 'Permissionários são criados ao aprovar linhas na conferência da planilha.');
+        : emptyState('Nenhum permissionário encontrado.', 'Cadastre um novo permissionário ou aprove linhas na conferência da planilha.');
       $$('tr[data-id]', body).forEach((tr) => { tr.onclick = () => permDrawer(tr.dataset.id, load); tr.onkeydown = (e) => e.key === 'Enter' && permDrawer(tr.dataset.id, load); });
     } catch (e) { $('#pl').innerHTML = errorBlock(e); }
   };
   $('#pq').addEventListener('input', debounce(load, 300)); $('#pst').onchange = load;
+  $('#pnew').onclick = () => newPermDrawer({ onDone: load });
   $('#pexp').onclick = () => downloadFile(`/reports/export/permissionarios.xlsx${S.campaignId ? `?campaign_id=${S.campaignId}` : ''}`, 'permissionarios.xlsx').catch(fail);
   await load();
 }
@@ -619,9 +614,11 @@ async function permDrawer(id, reload) {
       <div class="field"><label for="peJ">Justificativa</label><input id="peJ" required placeholder="Ex.: Regularização conferida in loco"></div>
       <div class="hint" style="margin:-6px 0 12px">Permissionários fora da situação Ativo não recebem talões e seus comprovantes são recusados no balcão.</div>
       <button class="btn btn-primary">Salvar alterações</button></form>
-      <hr class="divider"><h3>Vínculos com boxes</h3>${p.occupancies.length ? `<ul class="timeline">${p.occupancies.map((o) => `<li><b>Box ${esc(o.box_number)}</b> — ${esc(o.activity)} ${o.is_current ? chip('ATIVO', 'Vigente') : ''}<small>${fmtDate(o.start_date)}${o.end_date ? ' a ' + fmtDate(o.end_date) : ''} · ${esc(o.term || '')}</small></li>`).join('')}</ul>` : emptyState('Sem vínculos.')}
+      <hr class="divider"><div class="panel-head" style="margin-bottom:6px"><h3>Vínculos com boxes</h3><button class="btn btn-secondary btn-sm" id="peBox">${icon('box')}Vincular a um box</button></div>${p.occupancies.length ? `<ul class="timeline">${p.occupancies.map((o) => `<li><b><a href="javascript:void 0" data-boxlink="${esc(o.box_number)}">Box ${esc(o.box_number)}</a></b> — ${esc(o.activity)} ${o.is_current ? chip('ATIVO', 'Vigente') : ''}<small>${fmtDate(o.start_date)}${o.end_date ? ' a ' + fmtDate(o.end_date) : ''} · ${esc(o.term || '')}</small></li>`).join('')}</ul>` : emptyState('Sem vínculos.')}
       <hr class="divider"><h3>Talões recebidos</h3>${p.batches.length ? `<table><tbody>${p.batches.map((b) => `<tr><td><b>Lote #${b.batch_number}</b><span class="sub">${esc(b.campaign_name)}</span></td><td class="num">${esc(b.first_code)}–${esc(b.last_code.split('-')[1])}</td><td class="r num">${b.used}/${b.total}</td></tr>`).join('')}</tbody></table>` : emptyState('Nenhum talão.')}
       <hr class="divider"><h3>Histórico de alterações</h3>${p.history.length ? `<ul class="timeline">${p.history.map((h) => { const a = JSON.parse(h.after || '{}'); return `<li><b>${esc(a.status ? 'Situação: ' + statusLabel(a.status) : 'Cadastro atualizado')}</b><small>${fmtDateTime(h.timestamp)} · ${esc(h.username)} · ${esc(a.justification || '')}</small></li>`; }).join('')}</ul>` : emptyState('Sem alterações registradas.')}`;
+    $('#peBox', body).onclick = () => assignDrawer({ permissionarioId: p.id, permissionarioName: p.name, onDone: () => { permDrawer(id, reload); if (reload) reload(); } });
+    $$('[data-boxlink]', body).forEach((a) => a.onclick = () => boxDrawer(a.dataset.boxlink, reload));
     $('#pe', body).onsubmit = async (e) => {
       e.preventDefault();
       if ($('#peJ').value.trim().length < 5) { $('#peJ').classList.add('invalid'); toast('Informe a justificativa.', 'warn'); return; }
@@ -968,7 +965,7 @@ Pages.guia = async (root) => {
     <div class="guide-flow">
       <div><span class="who">Gestor</span><h3>Criar a campanha</h3><p>Em Campanhas, preencha calendário, regras, prêmios e regulamento. Envie para aprovação.</p>${role === 'ADMIN' ? '<a href="#/campanhas">Abrir Campanhas</a>' : ''}</div>
       <div><span class="who">Gestor + jurídico</span><h3>Aprovar e ativar</h3><p>Registre os seis itens jurídicos e o parecer. Com a campanha aprovada, ative-a.</p></div>
-      <div><span class="who">Gestor</span><h3>Conferir boxes</h3><p>Na conferência da planilha, aprove cada box. Só boxes confirmados recebem talões.</p>${role === 'ADMIN' ? '<a href="#/permissionarios/conf">Abrir conferência</a>' : ''}</div>
+      <div><span class="who">Gestor</span><h3>Conferir boxes</h3><p>Na conferência da planilha, aprove cada box. Quem não está na planilha é cadastrado em Novo permissionário; trocas de titular são feitas pelo mapa. Só boxes confirmados recebem talões.</p>${role === 'ADMIN' ? '<a href="#/permissionarios/conf">Abrir conferência</a>' : ''}</div>
       <div><span class="who">Gestor</span><h3>Distribuir talões</h3><p>Em Talões e comprovantes, gere lotes numerados para cada box. Não há sobreposição de números.</p></div>
       <div><span class="who">Permissionário</span><h3>Entregar comprovantes</h3><p>A cada compra acima do mínimo, entregue um comprovante e registre a entrega no portal.</p>${role === 'PERMISSIONARIO' ? '<a href="#/portal">Abrir Meu box</a>' : ''}</div>
       <div><span class="who">Atendente</span><h3>Validar no balcão</h3><p>Leia o comprovante, identifique o consumidor pelo CPF e gere o número da sorte.</p>${role !== 'PERMISSIONARIO' ? '<a href="#/balcao">Abrir Balcão</a>' : ''}</div>
@@ -1002,3 +999,174 @@ Pages.guia = async (root) => {
       <p>Os comprovantes <b>NATAL-00001</b> a <b>NATAL-00050</b> do Box 260 estão livres para você testar o balcão. ${S.info.ephemeral_database ? 'Quando o servidor reinicia, tudo volta a este estado inicial.' : ''}</p>
       <p class="muted">Para testar um CPF, use um número válido como 529.982.247-25.</p></section>` : ''}`;
 };
+
+
+/* ================================================================== GESTÃO MANUAL DE BOXES E TITULARES */
+let ACTIVITIES = null;
+async function activitiesDatalist() {
+  if (!ACTIVITIES) ACTIVITIES = await api('/activities');
+  return `<datalist id="actList">${ACTIVITIES.map((a) => `<option value="${esc(a)}">`).join('')}</datalist>`;
+}
+const BOX_ACTION_TXT = { BOX_HOLDER_ASSIGNED: 'Titular vinculado', BOX_HOLDER_TRANSFERRED: 'Troca de titular', BOX_HOLDER_RELEASED: 'Vínculo encerrado', BOX_UPDATED: 'Box alterado' };
+
+/* envia e, se houver comprovantes em aberto do titular anterior, pede confirmação e reenvia */
+async function sendWithAck(path, body) {
+  try { return await api(path, { method: 'POST', body }); }
+  catch (e) {
+    if (e.status === 409 && /comprovante/.test(e.message) && confirm(`${e.message}\n\nConfirmar mesmo assim?`)) {
+      return api(path, { method: 'POST', body: { ...body, acknowledge_outstanding: true } });
+    }
+    throw e;
+  }
+}
+
+async function boxDrawer(number, onChange) {
+  const body = openDrawer(`Box ${number}`, loadingBlock(6));
+  const reload = () => { boxDrawer(number, onChange); if (onChange) onChange(); };
+  try {
+    const d = await api(`/boxes/${number}/detail`);
+    const c = d.current;
+    $('.drawer-head small') && ($('.drawer-head small').textContent = '');
+    body.innerHTML = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">${chip(d.status)}${c && c.permissionario_status !== 'ATIVO' ? chip(c.permissionario_status, 'Titular ' + statusLabel(c.permissionario_status).toLowerCase()) : ''}</div>
+      ${c ? `<dl class="kv"><dt>Titular</dt><dd><a href="javascript:void 0" id="bxPerm">${esc(c.permissionario)}</a></dd><dt>Atividade</dt><dd>${esc(c.activity)}</dd>
+        <dt>Desde</dt><dd>${fmtDate(c.since)}</dd><dt>Termo / documento</dt><dd>${esc(c.term || '—')}</dd>
+        <dt>Comprovantes em aberto</dt><dd>${fmtN(c.pending_vouchers)}</dd></dl>`
+        : `<p class="muted">${d.status === 'SEM_USO' ? 'Box marcado como sem uso.' : 'Este box não tem titular vigente.'}</p>`}
+      ${d.sector || d.notes ? `<dl class="kv" style="margin-top:8px">${d.sector ? `<dt>Setor</dt><dd>${esc(d.sector)}</dd>` : ''}${d.notes ? `<dt>Observações</dt><dd style="font-weight:400">${esc(d.notes)}</dd>` : ''}</dl>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+        ${d.status !== 'SEM_USO' ? `<button class="btn btn-primary" id="bxAssign">${icon('portal')}${c ? 'Trocar titular' : 'Vincular titular'}</button>` : ''}
+        ${c ? `<button class="btn btn-secondary" id="bxRelease">Encerrar vínculo</button>` : ''}
+        <button class="btn btn-secondary" id="bxEdit">${icon('editar')}Editar box</button>
+      </div>
+      ${d.staging_rows.some((r) => r.status === 'PENDENTE_REVISAO') ? notice('warn', 'Linha da planilha pendente', `Há ${d.staging_rows.filter((r) => r.status === 'PENDENTE_REVISAO').length} linha(s) da planilha oficial para este box aguardando conferência. <a href="#/permissionarios/conf" id="bxConf">Abrir conferência</a>`) : ''}
+      <hr class="divider"><h3>Titulares</h3>
+      ${d.holders.length ? `<ul class="timeline">${d.holders.map((h) => `<li><b>${esc(h.permissionario)}</b> — ${esc(h.activity)} ${h.is_current ? chip('ATIVO', 'Vigente') : ''}<small>${fmtDate(h.start_date)}${h.end_date ? ' a ' + fmtDate(h.end_date) : ' até hoje'}${h.term ? ' · ' + esc(h.term) : ''}</small></li>`).join('')}</ul>` : emptyState('Nenhum titular registrado.')}
+      <hr class="divider"><h3>Alterações</h3>
+      ${d.history.length ? `<ul class="timeline">${d.history.map((h) => { const a = JSON.parse(h.after || '{}'); return `<li><b>${esc(BOX_ACTION_TXT[h.action] || h.action)}</b>${a.holder ? ' — ' + esc(a.holder) : ''}<small>${fmtDateTime(h.timestamp)} · ${esc(h.username)}${a.justification ? ' · ' + esc(a.justification) : ''}</small></li>`; }).join('')}</ul>` : emptyState('Sem alterações manuais.', 'Mudanças feitas pela conferência da planilha aparecem na auditoria.')}`;
+    if ($('#bxPerm', body)) $('#bxPerm', body).onclick = () => permDrawer(c.permissionario_id, onChange);
+    if ($('#bxConf', body)) $('#bxConf', body).onclick = () => closeOverlay();
+    if ($('#bxAssign', body)) $('#bxAssign', body).onclick = () => assignDrawer({ boxNumber: number, current: c, onDone: reload });
+    if ($('#bxRelease', body)) $('#bxRelease', body).onclick = () => releaseDrawer(number, c, reload);
+    $('#bxEdit', body).onclick = () => editBoxDrawer(d, reload);
+  } catch (e) { body.innerHTML = errorBlock(e); }
+}
+
+async function assignDrawer({ boxNumber = '', current = null, permissionarioId = null, permissionarioName = '', onDone }) {
+  const [perms, dl] = await Promise.all([permissionarioId ? Promise.resolve([]) : api('/permissionarios'), activitiesDatalist()]);
+  const title = boxNumber ? (current ? `Trocar titular do Box ${boxNumber}` : `Vincular titular ao Box ${boxNumber}`) : `Vincular ${permissionarioName} a um box`;
+  const body = openDrawer(title, `${current ? notice('info', `Titular atual: ${current.permissionario}`, `O vínculo atual será encerrado hoje e ficará no histórico.${current.pending_vouchers ? ` Ele ainda tem <b>${current.pending_vouchers}</b> comprovante(s) em aberto, que continuam válidos em nome dele.` : ''}`) : ''}
+    <form id="asg">${dl}
+      ${boxNumber ? '' : `<div class="field"><label for="asBox">Número do box</label><input id="asBox" inputmode="numeric" required placeholder="1 a 368"><div class="hint" id="asBoxHint"></div></div>`}
+      ${permissionarioId ? '' : `<div class="field"><label for="asPerm">Novo titular</label><input id="asPerm" list="permList" placeholder="Digite para buscar pelo nome" autocomplete="off" required>
+        <datalist id="permList">${perms.map((p) => `<option value="${esc(p.name)}">${esc(p.boxes.length ? 'Box ' + p.boxes.join(', ') : 'sem box')} · ${esc(statusLabel(p.status))}</option>`).join('')}</datalist>
+        <div class="hint">Não está na lista? <a href="javascript:void 0" id="asNew">Cadastrar novo permissionário</a></div></div>`}
+      <div class="field"><label for="asAct">Atividade comercial</label><input id="asAct" list="actList" value="${esc(current ? current.activity : '')}" placeholder="Ex.: MERCEARIA" required></div>
+      <div class="field"><label for="asTerm">Termo de permissão / documento <small>(opcional)</small></label><input id="asTerm" placeholder="Ex.: TERMO-2026-045"></div>
+      <div class="field"><label for="asJ">Justificativa</label><textarea id="asJ" placeholder="Ex.: Cessão aprovada no processo 77/2026."></textarea></div>
+      <button class="btn btn-primary" id="asBtn">${current ? 'Confirmar troca de titular' : 'Vincular titular'}</button></form>`, { modal: true });
+  if ($('#asNew', body)) $('#asNew', body).onclick = () => newPermDrawer({ boxNumber, onDone });
+  if ($('#asBox', body)) $('#asBox', body).addEventListener('input', debounce(async () => {
+    const n = $('#asBox').value.trim(); const hint = $('#asBoxHint');
+    if (!/^\d+$/.test(n) || +n < 1 || +n > 368) { hint.textContent = n ? 'O box precisa estar entre 1 e 368.' : ''; return; }
+    try { const d = await api(`/boxes/${n}/detail`); hint.textContent = d.current ? `Ocupado por ${d.current.permissionario} — será feita a troca de titular.` : `Situação atual: ${statusLabel(d.status)}.`; if (d.current && !$('#asAct').value) $('#asAct').value = d.current.activity; } catch (_) { hint.textContent = ''; }
+  }, 300));
+  $('#asg', body).onsubmit = async (e) => {
+    e.preventDefault();
+    let pid = permissionarioId;
+    if (!pid) {
+      const name = $('#asPerm').value.trim();
+      const match = perms.find((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (!match) { toast('Escolha um permissionário da lista ou cadastre um novo.', 'warn'); $('#asPerm').focus(); return; }
+      pid = match.id;
+    }
+    const n = boxNumber || $('#asBox').value.trim();
+    const j = $('#asJ').value.trim();
+    if (j.length < 5) { $('#asJ').classList.add('invalid'); toast('Informe a justificativa.', 'warn'); return; }
+    await withLoading($('#asBtn'), async () => {
+      try {
+        await sendWithAck(`/boxes/${n}/holder`, { permissionario_id: pid, activity_name: $('#asAct').value.trim(), authorization_term_ref: $('#asTerm').value.trim() || null, justification: j });
+        ACTIVITIES = null; closeOverlay(); toast(`Box ${n} vinculado.`); if (onDone) onDone();
+      } catch (err) { fail(err); }
+    });
+  };
+}
+
+function releaseDrawer(number, current, onDone) {
+  const body = openDrawer(`Encerrar vínculo do Box ${number}`, `<p>O vínculo de <b>${esc(current.permissionario)}</b> será encerrado hoje e ficará no histórico do box. O cadastro do permissionário continua existindo.</p>
+    ${current.pending_vouchers ? notice('warn', `${current.pending_vouchers} comprovante(s) em aberto`, 'Eles continuam válidos em nome do permissionário. Se preciso, cancele o lote em Talões e comprovantes.') : ''}
+    <form id="rel"><div class="field"><label for="relSt">Nova situação do box</label><select id="relSt"><option value="VAGO_CONFIRMADO">Vago</option><option value="EM_REGULARIZACAO">Em regularização</option><option value="SEM_USO">Sem uso</option></select></div>
+    <div class="field"><label for="relJ">Justificativa</label><textarea id="relJ" placeholder="Ex.: Desistência formalizada em 03/11/2026."></textarea></div>
+    <button class="btn btn-danger" id="relBtn">Encerrar vínculo</button></form>`, { modal: true });
+  $('#rel', body).onsubmit = async (e) => {
+    e.preventDefault();
+    const j = $('#relJ').value.trim();
+    if (j.length < 5) { $('#relJ').classList.add('invalid'); toast('Informe a justificativa.', 'warn'); return; }
+    await withLoading($('#relBtn'), async () => {
+      try { await sendWithAck(`/boxes/${number}/release`, { target_status: $('#relSt').value, justification: j }); closeOverlay(); toast(`Vínculo do Box ${number} encerrado.`); onDone(); }
+      catch (err) { fail(err); }
+    });
+  };
+}
+
+async function editBoxDrawer(d, onDone) {
+  const dl = await activitiesDatalist();
+  const statuses = d.current ? [['CONFIRMADO', 'Confirmado'], ['EM_REGULARIZACAO', 'Em regularização']] : [['VAGO_CONFIRMADO', 'Vago'], ['EM_REGULARIZACAO', 'Em regularização'], ['SEM_USO', 'Sem uso']];
+  const body = openDrawer(`Editar Box ${d.box_number}`, `<form id="eb">${dl}
+    <div class="field"><label for="ebSt">Situação</label><select id="ebSt">${statuses.map(([k, l]) => `<option value="${k}" ${d.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <div class="hint">${d.current ? 'Para deixar o box vago, use "Encerrar vínculo". Boxes em regularização não recebem talões.' : 'Para confirmar o box, vincule um titular.'}</div></div>
+    ${d.current ? `<div class="field"><label for="ebAct">Atividade do titular</label><input id="ebAct" list="actList" value="${esc(d.current.activity)}"></div>` : ''}
+    <div class="field"><label for="ebSec">Setor <small>(opcional)</small></label><input id="ebSec" value="${esc(d.sector || '')}" placeholder="Ex.: Setor de peixes"></div>
+    <div class="field"><label for="ebNotes">Observações</label><textarea id="ebNotes">${esc(d.notes || '')}</textarea></div>
+    <div class="field"><label for="ebJ">Justificativa</label><input id="ebJ" placeholder="Ex.: Vistoria do fiscal em 03/11"></div>
+    <button class="btn btn-primary" id="ebBtn">Salvar alterações</button></form>`, { modal: true });
+  $('#eb', body).onsubmit = async (e) => {
+    e.preventDefault();
+    const j = $('#ebJ').value.trim();
+    if (j.length < 5) { $('#ebJ').classList.add('invalid'); toast('Informe a justificativa.', 'warn'); return; }
+    const payload = { official_status: $('#ebSt').value, sector: $('#ebSec').value, notes: $('#ebNotes').value, justification: j };
+    if ($('#ebAct') && $('#ebAct').value.trim() !== d.current.activity) payload.activity_name = $('#ebAct').value.trim();
+    await withLoading($('#ebBtn'), async () => {
+      try { await api(`/boxes/${d.box_number}`, { method: 'PATCH', body: payload }); ACTIVITIES = null; closeOverlay(); toast(`Box ${d.box_number} atualizado.`); onDone(); }
+      catch (err) { fail(err); }
+    });
+  };
+}
+
+async function newPermDrawer({ boxNumber = '', onDone } = {}) {
+  const dl = await activitiesDatalist();
+  const body = openDrawer('Novo permissionário', `<p class="muted">Use para quem não está na planilha oficial — por exemplo, um novo titular assumindo um box vago.</p>
+    <form id="np">${dl}
+    <div class="field"><label for="npN">Nome completo</label><input id="npN" required></div>
+    <div class="row"><div class="field"><label for="npD">CPF ou CNPJ</label><input id="npD" inputmode="numeric"></div>
+      <div class="field"><label for="npS">Situação</label><select id="npS"><option value="ATIVO">Ativo</option><option value="SUSPENSO">Suspenso</option><option value="INATIVO">Inativo</option></select></div></div>
+    <div class="row"><div class="field"><label for="npP">Telefone</label><input id="npP" inputmode="tel"></div><div class="field"><label for="npE">E-mail</label><input id="npE" type="email"></div></div>
+    <hr class="divider"><h3 style="margin-bottom:8px">Box <small class="muted" style="font-family:var(--font-body);font-weight:400">(opcional)</small></h3>
+    <div class="row"><div class="field"><label for="npB">Número do box</label><input id="npB" inputmode="numeric" value="${esc(boxNumber)}" placeholder="1 a 368"><div class="hint" id="npBH"></div></div>
+      <div class="field"><label for="npA">Atividade</label><input id="npA" list="actList" placeholder="Ex.: VARIEDADES"></div></div>
+    <div class="field"><label for="npT">Termo de permissão / documento</label><input id="npT"></div>
+    <div class="field"><label for="npJ">Justificativa</label><textarea id="npJ" placeholder="Ex.: Termo de permissão 045/2026 assinado em 01/11/2026."></textarea></div>
+    <button class="btn btn-primary" id="npBtn">Cadastrar permissionário</button></form>`);
+  maskPhoneInput($('#npP'));
+  const checkBox = async () => {
+    const n = $('#npB').value.trim(); const h = $('#npBH');
+    if (!n) { h.textContent = ''; return; }
+    if (!/^\d+$/.test(n) || +n < 1 || +n > 368) { h.textContent = 'O box precisa estar entre 1 e 368.'; return; }
+    try { const d = await api(`/boxes/${n}/detail`); h.textContent = d.current ? `Ocupado por ${d.current.permissionario}: será feita a troca de titular.` : `Situação atual: ${statusLabel(d.status)}.`; if (d.current && !$('#npA').value) $('#npA').value = d.current.activity; } catch (_) { h.textContent = ''; }
+  };
+  $('#npB').addEventListener('input', debounce(checkBox, 300)); if (boxNumber) checkBox();
+  $('#np', body).onsubmit = async (e) => {
+    e.preventDefault();
+    const j = $('#npJ').value.trim();
+    if (j.length < 5) { $('#npJ').classList.add('invalid'); toast('Informe a justificativa.', 'warn'); return; }
+    if ($('#npB').value.trim() && !$('#npA').value.trim()) { toast('Informe a atividade do box.', 'warn'); $('#npA').focus(); return; }
+    const payload = { name: $('#npN').value.trim(), document_cpf_cnpj: $('#npD').value.trim() || null, status: $('#npS').value,
+      phone: $('#npP').value.trim() || null, email: $('#npE').value.trim() || null, box_number: $('#npB').value.trim() || null,
+      activity_name: $('#npA').value.trim() || null, authorization_term_ref: $('#npT').value.trim() || null, justification: j };
+    await withLoading($('#npBtn'), async () => {
+      try {
+        const r = await sendWithAck('/permissionarios', payload);
+        ACTIVITIES = null; closeOverlay(); toast(`${r.name} cadastrado${payload.box_number ? ` no Box ${payload.box_number}` : ''}.`); if (onDone) onDone();
+      } catch (err) { fail(err); }
+    });
+  };
+}
