@@ -107,7 +107,9 @@ async function api(path, { method = 'GET', body, raw = false } = {}) {
     throw new ApiError(401, 'Sessão encerrada.');
   }
   if (!res.ok) {
-    let detail = `Erro ${res.status}`;
+    let detail = res.status >= 500
+      ? `O servidor não conseguiu processar a solicitação (erro ${res.status}). Tente de novo em instantes; se persistir, verifique os logs do servidor.`
+      : `Erro ${res.status}`;
     try {
       const j = await res.json();
       if (typeof j.detail === 'string') detail = j.detail;
