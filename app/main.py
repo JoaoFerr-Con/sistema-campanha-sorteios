@@ -4,13 +4,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.seed import ensure_initialized, bootstrap_initial_data  # noqa: F401 (reexportado p/ testes)
 from app.api.routes import api_router
 
-STATIC_DIR = Path(__file__).parent / "static"
+PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
+STATIC_DIR = PUBLIC_DIR / "static"
 log = logging.getLogger("campanhas")
 
 
@@ -49,12 +50,18 @@ async def unhandled(request: Request, exc: Exception):
 
 
 app.include_router(api_router)
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Na Vercel, public/ é servido pela CDN; localmente, o próprio FastAPI serve os arquivos.
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def serve_index():
-    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+    index = PUBLIC_DIR / "index.html"
+    if index.exists():
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+    # Na Vercel, public/ fica na CDN e pode não estar dentro da função.
+    return RedirectResponse("/index.html")
 
 
 @app.get("/health")

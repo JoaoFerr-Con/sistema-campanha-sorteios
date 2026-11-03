@@ -6,7 +6,7 @@ apuração pela Loteria Federal, para a Prefeitura Municipal de Barcarena (SEICO
 * **Backend:** Python 3.12, FastAPI, SQLAlchemy 2, Pydantic 2
 * **Banco:** SQLite (local/demonstração) ou Postgres (via `DATABASE_URL`)
 * **Interface:** HTML, CSS e JavaScript sem framework, servidos pelo próprio FastAPI
-* **Hospedagem:** pronta para a Vercel (`vercel.json` + `api/index.py`)
+* **Hospedagem:** pronta para a Vercel (detecção automática de FastAPI via `pyproject.toml`)
 
 O diagnóstico completo do MVP anterior, as correções feitas e os pontos que dependem de
 validação jurídica estão em **[DIAGNOSTICO.md](DIAGNOSTICO.md)**. Leia antes de usar com dados reais.
@@ -17,8 +17,8 @@ validação jurídica estão em **[DIAGNOSTICO.md](DIAGNOSTICO.md)**. Leia antes
 
 1. Envie esta pasta para um repositório no GitHub.
 2. Na Vercel: **Add New → Project**, importe o repositório.
-   * *Framework Preset:* **Other** (o `vercel.json` já define tudo).
-   * Não é preciso comando de build.
+   * *Framework Preset:* **FastAPI** (a Vercel detecta sozinha pelo `pyproject.toml`).
+   * Não é preciso comando de build nem diretório de saída.
 3. Em **Settings → Environment Variables**, cadastre:
    * `DEMO_MODE` = `true`
    * `SECRET_KEY` = uma chave longa e aleatória (`python -c "import secrets;print(secrets.token_urlsafe(48))"`)
@@ -98,13 +98,13 @@ Para testar o balcão, use um CPF válido, como `529.982.247-25`.
 ## Estrutura
 
 ```
-api/index.py            ponto de entrada da Vercel
+pyproject.toml          indica à Vercel onde está o app (app.main:app)
 app/main.py             aplicação FastAPI (inicializa o banco no primeiro acesso)
 app/core/               configuração, banco, segurança, dados iniciais
 app/models/entities.py  modelo de dados
 app/services/           regras de negócio (campanhas, talões, balcão, portal, apuração, relatórios)
 app/api/routes.py       API REST /api/v1
-app/static/             interface (index.html, core.js, pages.js, app.js, styles.css)
+public/                 interface servida pela CDN (index.html, static/*.js, static/styles.css, static/img)
 data/                   planilha oficial de permissionários
 tests/                  testes automatizados
 legado/                 versão autônoma anterior (só referência)
