@@ -166,7 +166,7 @@ def test_phase4_voucher_batch_allocation_and_no_overlaps(client, test_db):
     admin_header = get_auth(role="ADMIN", user_id=1, username="admin")
 
     # Get pilot campaign and confirmed box 260
-    campaign = test_db.query(Campaign).filter(Campaign.status == "ATIVA").first()
+    campaign = test_db.query(Campaign).filter(Campaign.name.like("Campanha Piloto%")).first()
     box_260 = test_db.query(Box).filter(Box.box_number == "260").first()
     occ = test_db.query(BoxOccupancy).filter(BoxOccupancy.box_id == box_260.id, BoxOccupancy.is_current == True).first()
 
@@ -208,7 +208,7 @@ def test_phase4_voucher_batch_allocation_and_no_overlaps(client, test_db):
 def test_phase5_balcao_attendance_and_duplicate_prevention(client, test_db):
     """Phase 5: Counter attendance, lucky number generation, and rejection of duplicate voucher redemption."""
     atendente_header = get_auth(role="ATENDENTE", user_id=2, username="atendente")
-    campaign = test_db.query(Campaign).filter(Campaign.status == "ATIVA").first()
+    campaign = test_db.query(Campaign).filter(Campaign.name.like("Campanha Piloto%")).first()
 
     # First validation of NATAL-00001
     payload = {
@@ -296,7 +296,7 @@ def test_phase8_official_loteria_federal_draw(client, test_db):
     """Phase 8: Audit base freeze (SHA-256) and official Loteria Federal extraction match."""
     admin_header = get_auth(role="ADMIN", user_id=1, username="admin")
     atendente_header = get_auth(role="ATENDENTE", user_id=2, username="atendente")
-    campaign = test_db.query(Campaign).filter(Campaign.status == "ATIVA").first()
+    campaign = test_db.query(Campaign).filter(Campaign.name.like("Campanha Piloto%")).first()
 
     # Validate one more voucher so we have multiple participations
     client.post(

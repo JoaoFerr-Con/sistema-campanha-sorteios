@@ -9,6 +9,7 @@ import json
 import logging
 import threading
 from datetime import datetime, timedelta
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
@@ -30,6 +31,7 @@ DEMO_ACCOUNTS = [
 ]
 
 _init_lock = threading.Lock()
+INIT_LOCK_KEY = 2026110301
 _initialized = False
 
 
@@ -41,15 +43,26 @@ def ensure_initialized():
     with _init_lock:
         if _initialized:
             return
-        Base.metadata.create_all(bind=engine)
-        db = SessionLocal()
+        # Com Postgres, várias instâncias podem iniciar juntas: um lock do banco garante que só uma
+        # cria as tabelas e os dados iniciais; as demais esperam e encontram tudo pronto.
+        lock_conn = None
+        if engine.dialect.name == "postgresql":
+            lock_conn = engine.connect()
+            lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": INIT_LOCK_KEY})
         try:
-            if settings.demo_mode:
-                bootstrap_initial_data(db, import_staging=True)
-            else:
-                bootstrap_production_admin(db)
+            Base.metadata.create_all(bind=engine)
+            db = SessionLocal()
+            try:
+                if settings.demo_mode:
+                    bootstrap_initial_data(db, import_staging=True)
+                else:
+                    bootstrap_production_admin(db)
+            finally:
+                db.close()
         finally:
-            db.close()
+            if lock_conn is not None:
+                lock_conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": INIT_LOCK_KEY})
+                lock_conn.close()
         _initialized = True
 
 

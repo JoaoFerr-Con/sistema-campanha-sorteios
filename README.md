@@ -32,9 +32,12 @@ validação jurídica estão em **[DIAGNOSTICO.md](DIAGNOSTICO.md)**. Leia antes
 > função reinicia** (depois de alguns minutos sem uso ou a cada novo deploy). Para uma demonstração
 > rápida, isso basta — o sistema avisa na tela. Para homologação com dados que persistem:
 >
-> 1. Na Vercel, **Storage → Create Database → Neon (Postgres)** e conecte ao projeto.
-> 2. Copie a URL de conexão para a variável `DATABASE_URL` (o sistema aceita `postgres://` ou `postgresql://`).
-> 3. Faça um novo deploy. As tabelas são criadas no primeiro acesso.
+> 1. Na Vercel, **Storage → Create Database → Neon (Postgres)** e conecte ao projeto
+>    (ambientes Production e Preview).
+> 2. O sistema lê a conexão de `DATABASE_URL`, `POSTGRES_URL` ou `STORAGE_URL` — qualquer prefixo
+>    que a integração criar funciona.
+> 3. Faça um novo deploy (**Deployments → Redeploy**). As tabelas e os dados de demonstração são
+>    criados uma única vez no primeiro acesso, mesmo que várias instâncias iniciem juntas.
 
 ### Operação real (sem contas de demonstração)
 

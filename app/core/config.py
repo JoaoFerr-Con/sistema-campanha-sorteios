@@ -34,7 +34,12 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 def _database_url() -> str:
-    url = os.getenv("DATABASE_URL", "").strip()
+    # A integração Neon/Vercel pode criar a variável com outro prefixo (STORAGE_URL, POSTGRES_URL...).
+    url = ""
+    for key in ("DATABASE_URL", "POSTGRES_URL", "STORAGE_URL", "NEON_DATABASE_URL", "POSTGRES_PRISMA_URL"):
+        url = os.getenv(key, "").strip()
+        if url:
+            break
     if url:
         # Provedores costumam entregar "postgres://"; o SQLAlchemy exige o driver explícito.
         if url.startswith("postgres://"):

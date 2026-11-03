@@ -7,7 +7,8 @@ for suffix in ("", "-wal", "-shm"):
     p = pathlib.Path(str(TEST_DB) + suffix)
     if p.exists():
         p.unlink()
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB}"
+# TEST_DATABASE_URL permite rodar a suíte contra um Postgres (ex.: postgresql://pg@127.0.0.1:5440/campanhas_test)
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or f"sqlite:///{TEST_DB}"
 os.environ["DEMO_MODE"] = "true"
 os.environ["SECRET_KEY"] = "test-secret-key"
 

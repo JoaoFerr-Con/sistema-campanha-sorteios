@@ -82,7 +82,7 @@ def test_release_and_update_box_rules(client, test_db):
 
 
 def test_new_holder_of_confirmed_box_can_receive_batch(client, test_db):
-    c = test_db.query(Campaign).filter(Campaign.status.in_(["ATIVA", "APROVADA"])).first()
+    c = test_db.query(Campaign).filter(Campaign.status.in_(["ATIVA", "APROVADA"])).order_by(Campaign.id).first()
     if not c:
         return
     r = client.post("/api/v1/permissionarios", headers=ADMIN, json={"name": "Titular Com Talao", "box_number": "77",
